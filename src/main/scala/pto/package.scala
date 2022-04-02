@@ -1,9 +1,11 @@
+
+import cats.data.State
+
 package object pto {
 
   /////////////////////////////////
 
-  type Rand[+A] = RNG => (A, RNG)
-  // type Rand[A] = State[RNG, A]
+  type Rand[A] = State[RNG, A]
 
   /////////////////////////////////  
 
