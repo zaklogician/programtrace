@@ -3,7 +3,6 @@ package pto
 ///////////////////////////////////
 
 import cats._
-// import cats.implicits._
 
 ///////////////////////////////////
 
@@ -12,6 +11,9 @@ case class Matrix[T](elems: List[List[T]]) {
 
   def map[U](f: T => U): Matrix[U] = 
     Matrix(elems.map(xs => xs.map{f}))
+
+  override def toString(): String = 
+    elems.map { _.mkString("[",",","]") }.mkString("\n[","\n","]")
 }
 
 ///////////////////////////////////
