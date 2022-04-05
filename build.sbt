@@ -1,3 +1,4 @@
+addCompilerPlugin("com.olegpy" %% "better-monadic-for" % "0.3.1")
 scalacOptions += "-Ypartial-unification"
 
 lazy val root = project
@@ -12,6 +13,7 @@ lazy val root = project
         , "org.typelevel" %% "cats-core" % "2.3.0"
         , "org.typelevel" %% "cats-free" % "2.3.0"        
         , "com.novocode" % "junit-interface" % "0.8" % "test->default"        
+        , "com.cra.figaro" %% "figaro" % "5.0.0.0"
     )
 )
 

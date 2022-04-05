@@ -35,8 +35,7 @@ object Matrix {
 
   implicit val matrixTraverse: Traverse[Matrix] = new Traverse[Matrix] {
     override def traverse[G[_]: Applicative, A, B](fa: Matrix[A])(f: A => G[B]): G[Matrix[B]] = {
-      val zss = fa.map { f }.elems
-      val yy = cats.Traverse[List].sequence( zss.map { zs => cats.Traverse[List].sequence(zs) } )
+      val yy = cats.Traverse[List].sequence( fa.map( f ).elems.map { zs => cats.Traverse[List].sequence(zs) } )
       cats.Applicative[G].fmap( yy ) { Matrix(_) }
     }
 
