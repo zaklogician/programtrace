@@ -17,10 +17,6 @@ import com.cra.figaro.library._
 
 final case class UID(value: Int)
 
-object UID {
-  def next(x: UID): UID = UID(x.value+1)
-}
-
 ///////////////////////////////////
 
 object ProgramTraceOptimization {
@@ -60,12 +56,14 @@ object ProgramTraceOptimization {
   def uniformInt(rng: scala.util.Random)(min: Int, max: Int): Int = 
     uniformDouble(rng)(min,max).toInt
 
+/***************    
   def impureRandom(rng: scala.util.Random): SpecF ~> Id = new (SpecF ~> Id) {
     override def apply[A](fa: SpecF[A]): Id[A] = fa match { 
       case Const(value) => value
       case IntRange(min,max) => uniformInt(rng)(min,max)
     }
   }  
+  ***************/
 
   /////////////////////////////////
 
@@ -76,13 +74,15 @@ object ProgramTraceOptimization {
 
   type NamedSpecM[A] = Free[NamedSpecF, A]
 
-  val impureNameSpec: SpecF ~> NamedSpecM = new (SpecF ~> NamedSpecM) {
+  def impureNameSpec: SpecF ~> NamedSpecM = new (SpecF ~> NamedSpecM) {
 
-    var uid_ = UID(0)
+    var uid_ = 0
 
     override def apply[A](fa: SpecF[A]): NamedSpecM[A] = {
-      uid_ = UID.next(uid_)
-      Free.liftF( NamedSpecF(uid_,Free.liftF(fa) )  )
+      val result = Free.liftF( NamedSpecF(UID(uid_),Free.liftF(fa) )  )
+      uid_ += 1
+// println( s"impureNameSpec uid_ $uid_")
+      result      
     }
   }  
 
@@ -97,10 +97,10 @@ object ProgramTraceOptimization {
   val makeTrace: NamedSpecF ~> TraceStateM = new (NamedSpecF ~> TraceStateM) {
     override def apply[A](fa: NamedSpecF[A]): TraceStateM[A] = {
       val value = fa.spec.foldMap { initialValue }      
-      val element = fa.spec.foldMap { pureElement }.asInstanceOf[Element[Any]]
+      val elem = fa.spec.foldMap { pureElement }.asInstanceOf[Element[Any]]
+      val spec = fa.asInstanceOf[NamedSpecF[Any]]
       for { 
-        uid <- State.get[Trace].map { x => UID( x.size + 1 ) }
-        _ <- State.modify[Trace] { x => x.updated( uid, TraceValue(element, fa.asInstanceOf[NamedSpecF[Any]]) ) }
+        _ <- State.modify[Trace] { x => x.updated( fa.uid, TraceValue(elem, spec) ) }
         current <- State.get[Trace]
       } yield { value }
     }
@@ -109,21 +109,20 @@ object ProgramTraceOptimization {
   /////////////////////////////////
 
   def playback(trace: Trace): NamedSpecF ~> Element = new (NamedSpecF ~> Element) {
-    override def apply[A](fa: NamedSpecF[A]): Element[A] = {
-      val x = trace.get(fa.uid)
-      x match {
-        case Some(TraceValue(value, _)) => value.asInstanceOf[Element[A]]
-        case None => fa.spec.foldMap { pureElement } // FIXME: should output the updated trace also
-      }
+    override def apply[A](fa: NamedSpecF[A]): Element[A] = trace.get(fa.uid) match {
+      case Some(TraceValue(value, _)) => value.asInstanceOf[Element[A]]
+      case None => 
+        // println(s"playback -- uid:${fa.uid} not found")
+        fa.spec.foldMap { pureElement } 
+      // FIXME: ^ should output the updated trace also
     }
   }
 
   def impureMutate(t: Trace, rng: scala.util.Random): Trace = { 
     val l = t.toList
     val (uid,traceValue) = l(uniformInt(rng)(0, l.size-1))
-    val newValue = traceValue.spec.spec.foldMap { initialValue }
-    
-    t.updated(uid, traceValue.copy(value=Constant(newValue) ) )
+    val newValue = traceValue.spec.spec.foldMap { pureElement }     
+    t.updated(uid, traceValue.copy(value=newValue) )
   }
 
   /////////////////////////////////
@@ -154,19 +153,24 @@ object ProgramTraceOptimization {
     ///////////////////////////////
 
     val namedSpec = myMatrixSpec.foldMap { impureNameSpec }
-
     println(namedSpec) 
+
+    println("============================================")     
 
     for ( i <- 0 until 4 ) {
       val (trace,matrix) = namedSpec.foldMap { makeTrace }.run(Map()).value
-      println( trace.toList.sortBy { _._1.value }.map { mapletFormat }.mkString("\n") )
+      // println( trace.toList.sortBy { _._1.value }.map { mapletFormat }.mkString("\n") )
       println( matrix )    
+
+     // println( s"UIDs: ${trace.toList.map { _._1.value }.sorted}" )      
 
       val elem = namedSpec.foldMap { playback( trace ) }
       println( elem.generateValue( elem.generateRandomness() ) )
 
       (0 until 3).foldLeft(trace) { case (t,_) =>
         val newTrace = impureMutate(t, rng)
+        // println( s"UIDs: ${newTrace.toList.map { _._1.value }.sorted}" )
+
         val elem = namedSpec.foldMap { playback( newTrace ) }
         println( elem.generateValue( elem.generateRandomness() ) )
         newTrace
